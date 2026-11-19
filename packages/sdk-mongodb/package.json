@@ -3,5 +3,6 @@
   "version": "0.1.0",
   "description": "Recovera MongoDB backup verification SDK",
   "main": "src/index.js",
+  "types": "index.d.ts",
   "engines": {"node": ">=18"}
 }

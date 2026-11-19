@@ -12,4 +12,8 @@ The worker records `queued → processing → restoring → verifying → comple
 
 Temporary containers carry a Recovera ownership label and are force-removed in a `finally` block. Worker startup sweeps labeled containers left behind by an interrupted worker. The original backup mount remains read-only throughout.
 
+## Phase 3 deletion evidence
+
+Deletion records are tenant-scoped evidence with a unique `(application, collection, identifier, identifier type)` key. The worker reads only records newer than the backup timestamp, performs an exact BSON-aware `_id` lookup in the isolated database, and stores only an identifier reference in the report. It never stores the restored document. Missing database metadata or an evaluation cap generates a coverage warning rather than a false clean result.
+
 Every authenticated request resolves an active `Application` from its API key. Backup queries always include `applicationId`, providing tenant isolation even when a caller submits another tenant's document id. Backup paths are resolved below one configured root and must already exist there; Docker mounts that root read-only.

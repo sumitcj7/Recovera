@@ -74,3 +74,27 @@ The SDK exposes `RecoveraError` with `status` and `code` for consistent API, tim
 Create a BSON dump under `backups/` (for example, `mongodump --uri "$SOURCE_URI" --out backups/daily-backup`), register it with `backupLocation: "daily-backup"` and `metadata: { "databaseName": "mydb" }`, then queue a job with `verifyBackup`. Poll `getVerificationJob` until it is `completed` and fetch `getVerificationReport`. To demonstrate a failed restore, register a directory containing a deliberately truncated BSON/archive file; the report/job records `RESTORE_FAILED` after retries and the temporary container is removed. A missing collection or inadequate count produces a completed job with `verificationStatus: "failed"`, preserving the distinction from restoration failure.
 
 See [architecture notes](docs/architecture.md) for the Phase 1 boundaries.
+
+## Deletion tracking and resurrection alerts
+
+Record deletion evidence explicitly after a successful production deletion:
+
+```js
+await recovera.recordDeletion({ collection: 'users', recordId: 'USER_123' });
+```
+
+For Mongoose, `createDeletionTrackingPlugin` supports successful `findOneAndDelete`, document `deleteOne`, and exact-`_id` query `deleteOne` operations. Raw-driver deletes, direct database writes, `deleteMany`, bulk deletes, and external systems can bypass it, so they are not claimed as automatically tracked. A verification only considers deletion records created after the registered backup timestamp; this avoids falsely labelling records deleted before a backup was taken. Set `metadata.databaseName` while registering the backup to enable detection.
+
+Reports are available through `/api/v1/reports`, `/api/v1/reports/:id`, and `/api/v1/applications/me/statistics`. Final report states are `passed`, `passed_with_warnings`, `failed`, and `restoration_failed`; a confirmed resurrection is a `failed` report even when restoration itself succeeded.
+
+## Deletion tracking and resurrection alerts
+
+Record deletion evidence explicitly after a successful production deletion:
+
+```js
+await recovera.recordDeletion({ collection: 'users', recordId: 'USER_123' });
+```
+
+For Mongoose, `createDeletionTrackingPlugin` supports successful `findOneAndDelete`, document `deleteOne`, and exact-`_id` query `deleteOne` operations. Raw-driver deletes, direct database writes, `deleteMany`, bulk deletes, and external systems can bypass it, so they are not claimed as automatically tracked. A verification only considers deletion records created after the registered backup timestamp; this avoids falsely labelling records deleted before a backup was taken. Set `metadata.databaseName` while registering the backup to enable detection.
+
+Reports are available through `/api/v1/reports`, `/api/v1/reports/:id`, and `/api/v1/applications/me/statistics`. Final report states are `passed`, `passed_with_warnings`, `failed`, and `restoration_failed`.

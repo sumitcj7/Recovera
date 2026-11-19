@@ -1,2 +1,11 @@
-const router = require('express').Router(); const authenticate = require('../middlewares/authenticate'); const validate = require('../middlewares/validate'); const schema = require('../validators/verificationValidator'); const controller = require('../controllers/verificationController');
-router.use(authenticate); router.post('/backups/:backupId/verify', validate(schema), controller.create); router.get('/verification-jobs', controller.list); router.get('/verification-jobs/:id', controller.get); router.get('/verification-jobs/:id/report', controller.report); module.exports = router;
+const router = require("express").Router();
+const authenticate = require("../middlewares/authenticate");
+const validate = require("../middlewares/validate");
+const schema = require("../validators/verificationValidator");
+const controller = require("../controllers/verificationController");
+router.use(authenticate);
+router.post("/backups/:backupId/verify", validate(schema), controller.create);
+router.get("/verification-jobs", controller.list);
+router.get("/verification-jobs/:id", controller.get);
+router.get("/verification-jobs/:id/report", controller.report);
+module.exports = router;

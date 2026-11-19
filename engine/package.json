@@ -2,7 +2,27 @@
   "name": "@recovera/engine",
   "version": "0.1.0",
   "main": "src/server.js",
-  "scripts": {"start": "node src/server.js", "worker": "node src/worker.js", "dev": "node --watch src/server.js", "test": "jest --runInBand"},
-  "dependencies": {"bcryptjs": "^2.4.3", "bullmq": "^5.34.3", "cors": "^2.8.5", "dockerode": "^4.0.2", "dotenv": "^16.4.7", "express": "^4.21.2", "ioredis": "^5.4.2", "mongoose": "^8.9.5", "pino": "^9.5.0", "pino-http": "^10.3.0", "zod": "^3.24.1"},
-  "devDependencies": {"jest": "^29.7.0", "supertest": "^7.0.0"}
+  "scripts": {
+    "start": "node src/server.js",
+    "worker": "node src/worker.js",
+    "dev": "node --watch src/server.js",
+    "test": "jest --runInBand"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "bullmq": "^5.34.3",
+    "cors": "^2.8.5",
+    "dockerode": "^4.0.2",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ioredis": "^5.4.2",
+    "mongoose": "^8.9.5",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  }
 }

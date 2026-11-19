@@ -1,0 +1,11 @@
+const router = require("express").Router();
+const authenticate = require("../middlewares/authenticate");
+const validate = require("../middlewares/validate");
+const validateQuery = require("../middlewares/validateQuery");
+const schema = require("../validators/deletionValidator");
+const pagination = require("../validators/paginationValidator");
+const controller = require("../controllers/deletionController");
+router.use(authenticate);
+router.post("/", validate(schema), controller.record);
+router.get("/", validateQuery(pagination), controller.list);
+module.exports = router;

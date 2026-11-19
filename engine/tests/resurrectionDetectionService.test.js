@@ -1,0 +1,7 @@
+jest.mock('../src/models/DeletionRecord', () => ({ find: jest.fn() })); jest.mock('../src/services/dockerRestoreService', () => ({ exec: jest.fn() }));
+const DeletionRecord = require('../src/models/DeletionRecord'); const { exec } = require('../src/services/dockerRestoreService'); const { detect } = require('../src/services/resurrectionDetectionService');
+describe('resurrection detection', () => {
+  beforeEach(() => jest.clearAllMocks());
+  test('only evaluates deletion evidence newer than the backup and emits no document content', async () => { const record = { collectionName: 'users', recordIdentifier: 'USER_123', identifierType: 'string', deletedAt: new Date() }; DeletionRecord.find.mockReturnValue({ sort: () => ({ limit: async () => [record] }) }); exec.mockResolvedValue({ stdout: 'true\n' }); const result = await detect({ container: {}, applicationId: 'app', backupCreatedAt: new Date('2020-01-01'), databaseName: 'orders' }); expect(DeletionRecord.find).toHaveBeenCalledWith({ applicationId: 'app', deletedAt: { $gt: new Date('2020-01-01') } }); expect(result.findings).toEqual([expect.objectContaining({ recordIdentifier: 'USER_123', detected: true })]); expect(result.findings[0].document).toBeUndefined(); });
+  test('marks tracking unavailable without configured database metadata', async () => { await expect(detect({ container: {}, applicationId: 'app', backupCreatedAt: new Date() })).resolves.toMatchObject({ status: 'unavailable' }); });
+});
