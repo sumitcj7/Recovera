@@ -1,0 +1,8 @@
+{
+  "name": "recovera",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["engine", "packages/*"],
+  "scripts": {"start": "npm run start -w @recovera/engine", "dev": "npm run dev -w @recovera/engine", "test": "npm run test -w @recovera/engine"},
+  "engines": {"node": ">=18"}
+}

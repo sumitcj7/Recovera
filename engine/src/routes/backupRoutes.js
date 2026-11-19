@@ -1,0 +1,2 @@
+const router = require('express').Router(); const controller = require('../controllers/backupController'); const validate = require('../middlewares/validate'); const authenticate = require('../middlewares/authenticate'); const schema = require('../validators/backupValidator');
+router.use(authenticate); router.post('/', validate(schema), controller.create); router.get('/', controller.list); router.get('/:id', controller.get); router.delete('/:id', controller.remove); module.exports = router;

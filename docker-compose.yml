@@ -1,0 +1,24 @@
+services:
+  engine:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports: ["8000:8000"]
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/recovera
+      REDIS_URL: redis://redis:6379
+      APP_KEY_PEPPER: ${APP_KEY_PEPPER:?Set APP_KEY_PEPPER in .env}
+      BACKUP_STORAGE_ROOT: /var/lib/recovera/backups
+    volumes: ["./backups:/var/lib/recovera/backups:ro"]
+    depends_on: [mongo, redis]
+  mongo:
+    image: mongo:8
+    ports: ["127.0.0.1:27017:27017"]
+    volumes: ["mongo-data:/data/db"]
+  redis:
+    image: redis:7-alpine
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redis-data:/data"]
+volumes:
+  mongo-data:
+  redis-data:

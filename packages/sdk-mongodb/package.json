@@ -1,0 +1,7 @@
+{
+  "name": "@recovera/sdk-mongodb",
+  "version": "0.1.0",
+  "description": "Recovera MongoDB backup verification SDK",
+  "main": "src/index.js",
+  "engines": {"node": ">=18"}
+}
