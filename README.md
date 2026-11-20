@@ -7,11 +7,10 @@ Recovera is an independent assurance service for verifying that existing MongoDB
 1. Copy `.env.example` to `.env`, set a unique `APP_KEY_PEPPER`, and create a controlled `backups/` directory with a backup subdirectory (for example `backups/daily-backup`).
 2. Install dependencies: `npm install`.
 3. Start MongoDB and Redis with Docker: `docker compose up -d mongo redis`.
-4. Start the Engine: `npm start` (or `npm run dev`).
-5. In a second terminal, start the verification worker: `npm run worker -w @recovera/engine`.
-6. Run tests: `npm test`.
+4. Start the Engine and verification worker together: `npm start` (or `npm run dev`).
+5. Run tests: `npm test`.
 
-Start metadata dependencies with `docker compose up -d mongo redis`. The worker intentionally runs on the host, where it can access the local Docker daemon through its normal API. It is not mounted into Compose with `/var/run/docker.sock`, because that would give a container broad Docker-host control. The Engine mounts `./backups` read-only; it never writes backup data.
+Start metadata dependencies with `docker compose up -d mongo redis`. The Engine starts its verification worker in the same host process, where it can access the local Docker daemon through its normal API. `npm run worker -w @recovera/engine` remains available when a standalone worker process is preferred. It is not mounted into Compose with `/var/run/docker.sock`, because that would give a container broad Docker-host control. The Engine mounts `./backups` read-only; it never writes backup data.
 
 ## API
 

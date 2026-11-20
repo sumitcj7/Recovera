@@ -1,6 +1,8 @@
 const path = require("path");
 const { z } = require("zod");
-require("dotenv").config({ path: path.resolve(process.cwd(), ".env") });
+// This module lives at engine/src/config. Resolve the workspace root explicitly
+// so npm workspace scripts load Recovera's shared .env rather than engine/.env.
+require("dotenv").config({ path: path.resolve(__dirname, "../../../.env") });
 
 const parsed = z
   .object({

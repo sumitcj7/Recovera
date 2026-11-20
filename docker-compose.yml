@@ -13,7 +13,7 @@ services:
     depends_on: [mongo, redis]
   mongo:
     image: mongo:8
-    ports: ["127.0.0.1:27017:27017"]
+    ports: ["127.0.0.1:27018:27017"]
     volumes: ["mongo-data:/data/db"]
   redis:
     image: redis:7-alpine

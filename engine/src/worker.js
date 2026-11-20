@@ -4,11 +4,12 @@ const { disconnectRedis } = require("./config/redis");
 const { cleanupAbandoned } = require("./services/dockerRestoreService");
 const { createWorker } = require("./workers/verificationWorker");
 let worker;
-async function start() {
-  await connectDatabase();
+async function startWorker({ connectDatabase: shouldConnectDatabase = true } = {}) {
+  if (shouldConnectDatabase) await connectDatabase();
   await cleanupAbandoned();
   worker = createWorker();
   logger.info("Verification worker started");
+  return worker;
 }
 async function shutdown(signal) {
   logger.info({ signal }, "Verification worker stopping");
@@ -16,9 +17,12 @@ async function shutdown(signal) {
   await Promise.all([disconnectRedis(), disconnectDatabase()]);
   process.exit(0);
 }
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
-start().catch((err) => {
-  logger.fatal({ err }, "Verification worker failed to start");
-  process.exit(1);
-});
+if (require.main === module) {
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  startWorker().catch((err) => {
+    logger.fatal({ err }, "Verification worker failed to start");
+    process.exit(1);
+  });
+}
+module.exports = { startWorker };
