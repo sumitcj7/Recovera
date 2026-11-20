@@ -4,13 +4,13 @@ Recovera is an independent assurance service for verifying that existing MongoDB
 
 ## Quick start
 
-1. Copy `.env.example` to `.env`, set a unique `APP_KEY_PEPPER`, and create a controlled `backups/` directory with a backup subdirectory (for example `backups/daily-backup`).
+1. Copy `.env.example` to `.env`, set a unique `APP_KEY_PEPPER` of at least 32 characters, and create a controlled `backups/` directory with a backup subdirectory (for example `backups/daily-backup`).
 2. Install dependencies: `npm install`.
 3. Start MongoDB and Redis with Docker: `docker compose up -d mongo redis`.
 4. Start the Engine and verification worker together: `npm start` (or `npm run dev`).
 5. Run tests: `npm test`.
 
-Start metadata dependencies with `docker compose up -d mongo redis`. The Engine starts its verification worker in the same host process, where it can access the local Docker daemon through its normal API. `npm run worker -w @recovera/engine` remains available when a standalone worker process is preferred. It is not mounted into Compose with `/var/run/docker.sock`, because that would give a container broad Docker-host control. The Engine mounts `./backups` read-only; it never writes backup data.
+Start metadata dependencies with `docker compose up -d mongo redis`. For host-run development, `.env` uses `BACKUP_STORAGE_ROOT=./backups`, resolved relative to the repository root (for example `D:\Nodejs\Recovera\backups`), and the Engine starts its verification worker in the same host process. For the Compose Engine, the same host directory is mounted read-only at `/var/lib/recovera/backups`; its container-only `BACKUP_STORAGE_ROOT` is set accordingly and its embedded worker is disabled. Do not start the worker in a container with Docker's host socket unless you have separately reviewed that security boundary.
 
 ## API
 
@@ -66,7 +66,9 @@ The SDK exposes `RecoveraError` with `status` and `code` for consistent API, tim
 
 ## Environment
 
-`PORT`, `MONGODB_URI`, `REDIS_URL`, `APP_KEY_PEPPER`, `BACKUP_STORAGE_ROOT`, `MONGODB_RESTORE_IMAGE`, `VERIFICATION_CONCURRENCY`, `VERIFICATION_ATTEMPTS`, `VERIFICATION_TIMEOUT_MS`, `RESTORE_MEMORY_BYTES`, `RESTORE_CPU_NANO`, and `LOG_LEVEL` are documented in `.env.example`. In production, use a long random `APP_KEY_PEPPER` kept in a secret manager and a non-public backup mount.
+`PORT`, `MONGODB_URI`, `REDIS_URL`, `APP_KEY_PEPPER`, `BACKUP_STORAGE_ROOT`, `MONGODB_RESTORE_IMAGE`, `VERIFICATION_CONCURRENCY`, `VERIFICATION_ATTEMPTS`, `VERIFICATION_TIMEOUT_MS`, `STUCK_JOB_THRESHOLD_MS`, `RESTORE_MEMORY_BYTES`, `RESTORE_CPU_NANO`, `RESTORE_PIDS_LIMIT`, `RUN_VERIFICATION_WORKER`, and `LOG_LEVEL` are documented in `.env.example`. Production startup rejects a missing, placeholder, or shorter-than-32-character `APP_KEY_PEPPER`. Keep the pepper in a secret manager and use a non-public backup mount.
+
+New application keys include an indexed public key ID and a secret component. Recovera uses that ID to fetch one active application, then bcrypt-verifies the full key with the pepper. Existing keys without the ID retain a compatibility fallback until rotated.
 
 ## Demonstrate restoration
 
@@ -86,14 +88,3 @@ For Mongoose, `createDeletionTrackingPlugin` supports successful `findOneAndDele
 
 Reports are available through `/api/v1/reports`, `/api/v1/reports/:id`, and `/api/v1/applications/me/statistics`. Final report states are `passed`, `passed_with_warnings`, `failed`, and `restoration_failed`; a confirmed resurrection is a `failed` report even when restoration itself succeeded.
 
-## Deletion tracking and resurrection alerts
-
-Record deletion evidence explicitly after a successful production deletion:
-
-```js
-await recovera.recordDeletion({ collection: 'users', recordId: 'USER_123' });
-```
-
-For Mongoose, `createDeletionTrackingPlugin` supports successful `findOneAndDelete`, document `deleteOne`, and exact-`_id` query `deleteOne` operations. Raw-driver deletes, direct database writes, `deleteMany`, bulk deletes, and external systems can bypass it, so they are not claimed as automatically tracked. A verification only considers deletion records created after the registered backup timestamp; this avoids falsely labelling records deleted before a backup was taken. Set `metadata.databaseName` while registering the backup to enable detection.
-
-Reports are available through `/api/v1/reports`, `/api/v1/reports/:id`, and `/api/v1/applications/me/statistics`. Final report states are `passed`, `passed_with_warnings`, `failed`, and `restoration_failed`.

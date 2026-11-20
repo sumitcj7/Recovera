@@ -8,6 +8,13 @@ const applicationSchema = new mongoose.Schema(
       enum: ["development", "staging", "production"],
       required: true,
     },
+    apiKeyId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+      select: false,
+    },
     apiKeyHash: { type: String, required: true, select: false },
     status: {
       type: String,
@@ -23,6 +30,7 @@ const applicationSchema = new mongoose.Schema(
     toJSON: {
       transform: (doc, ret) => {
         delete ret.apiKeyHash;
+        delete ret.apiKeyId;
         return ret;
       },
     },

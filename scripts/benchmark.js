@@ -1,0 +1,12 @@
+const { spawnSync } = require('child_process');
+const path = require('path');
+const count = Number(process.argv[2] || 1000);
+if (![1000, 10000, 50000].includes(count)) throw new Error('Usage: node scripts/benchmark.js <1000|10000|50000>');
+const root = path.resolve(__dirname, '..');
+const seed = `const d=db.getSiblingDB('benchmark'); d.users.deleteMany({}); const docs=[]; for(let i=0;i<${count};i++) docs.push({_id:'USER_'+i,email:'user'+i+'@example.test',name:'User '+i}); d.users.insertMany(docs);`;
+const started = Date.now();
+const result = spawnSync('docker', ['compose', 'exec', '-T', 'mongo', 'mongosh', '--quiet', '--eval', seed], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
+if (result.status !== 0) process.exit(result.status || 1);
+const dump = spawnSync('mongodump', ['--uri', 'mongodb://localhost:27018/benchmark', '--out', path.join(root, 'backups', `benchmark-${count}`)], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
+if (dump.status !== 0) process.exit(dump.status || 1);
+console.log(JSON.stringify({ documents: count, dumpPreparationDurationMs: Date.now() - started, note: 'Run Recovera verification separately and record its report timings; no performance value is fabricated.' }));

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const Backup = require("../models/Backup");
 const env = require("../config/env");
 const AppError = require("../utils/AppError");
@@ -30,10 +31,67 @@ function resolveLocation(location) {
   validateLocation(location);
   return path.resolve(env.BACKUP_STORAGE_ROOT, location);
 }
+function hasBsonFile(directory) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const candidate = path.join(directory, entry.name);
+    if (entry.isFile() && entry.name.endsWith(".bson")) return true;
+    if (entry.isDirectory() && hasBsonFile(candidate)) return true;
+  }
+  return false;
+}
+function validateBackupContent(location, backupFormat) {
+  const resolved = resolveLocation(location);
+  const stats = fs.statSync(resolved);
+  if (backupFormat === "archive" && !stats.isFile())
+    throw new AppError(
+      "Archive backups must reference a file",
+      400,
+      "INVALID_BACKUP_CONTENT",
+    );
+  if (
+    ["dump", "bson"].includes(backupFormat) &&
+    (!stats.isDirectory() || !hasBsonFile(resolved))
+  )
+    throw new AppError(
+      "Logical dump must contain at least one BSON file",
+      400,
+      "INVALID_BACKUP_CONTENT",
+    );
+  return resolved;
+}
+function verifyChecksum(resolved, expectedChecksum) {
+  if (!expectedChecksum) return;
+  const match = /^sha256:([a-fA-F0-9]{64})$/.exec(expectedChecksum);
+  if (!match)
+    throw new AppError(
+      "checksum must use sha256:<64 hexadecimal characters>",
+      400,
+      "INVALID_CHECKSUM",
+    );
+  if (!fs.statSync(resolved).isFile())
+    throw new AppError(
+      "Checksums are currently supported for archive files only",
+      400,
+      "UNSUPPORTED_CHECKSUM_TARGET",
+    );
+  const actual = crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(resolved))
+    .digest("hex");
+  if (actual.toLowerCase() !== match[1].toLowerCase())
+    throw new AppError(
+      "Backup checksum does not match",
+      422,
+      "CHECKSUM_MISMATCH",
+    );
+}
 async function create(applicationId, data) {
+  const backupLocation = validateLocation(data.backupLocation);
+  const resolved = validateBackupContent(backupLocation, data.backupFormat);
+  verifyChecksum(resolved, data.checksum);
   return Backup.create({
     ...data,
-    backupLocation: validateLocation(data.backupLocation),
+    backupLocation,
     applicationId,
   });
 }
@@ -63,6 +121,8 @@ async function remove(applicationId, id) {
 module.exports = {
   validateLocation,
   resolveLocation,
+  validateBackupContent,
+  verifyChecksum,
   create,
   list,
   get,

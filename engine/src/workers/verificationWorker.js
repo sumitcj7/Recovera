@@ -17,7 +17,10 @@ function errorShape(err) {
     details: err.stderr?.slice(-2000),
   };
 }
-async function processVerification(queueJob) {
+function isRestorationFailure(job) {
+  return job.restorationStatus !== "completed";
+}
+async function processVerification(queueJob, { signal, workerId } = {}) {
   const job = await VerificationJob.findById(queueJob.data.verificationJobId);
   if (!job || job.status === "cancelled" || job.status === "completed") return;
   const backup = await Backup.findOne({
@@ -39,7 +42,7 @@ async function processVerification(queueJob) {
       retryCount: queueJob.attemptsMade,
     });
     await transition(job, "restoring", { restorationStatus: "running" });
-    restoration = await restoreService.restore(backup);
+    restoration = await restoreService.restore(backup, { signal, workerId });
     await transition(job, "verifying", {
       restorationStatus: "completed",
       restorationDurationMs: restoration.durationMs,
@@ -132,17 +135,18 @@ async function processVerification(queueJob) {
     if (finalAttempt) {
       if (!["completed", "cancelled", "failed"].includes(job.status)) {
         const totalDurationMs = Date.now() - totalStarted;
+        const restorationFailed = isRestorationFailure(job);
         const report = await VerificationReport.create({
           applicationId: job.applicationId,
           backupId: job.backupId,
           verificationJobId: job._id,
-          finalStatus: "restoration_failed",
+          finalStatus: restorationFailed ? "restoration_failed" : "failed",
           restoration: {
-            status: "failed",
+            status: restorationFailed ? "failed" : "completed",
             durationMs: restoration?.durationMs,
             error: errorShape(err),
           },
-          verification: { status: "skipped", checks: [] },
+          verification: { status: restorationFailed ? "skipped" : "failed", checks: [] },
           resurrection: { status: "unavailable", findings: [] },
           metrics: {
             totalDurationMs,
@@ -178,26 +182,13 @@ async function processVerification(queueJob) {
     if (restoration) await restoration.cleanup();
   }
 }
-function createWorker() {
+function createWorker({ workerId } = {}) {
   const runWithTimeout = async (job) => {
+    const controller = new AbortController();
     let timer;
     try {
-      return await Promise.race([
-        processVerification(job),
-        new Promise((_, reject) => {
-          timer = setTimeout(
-            () =>
-              reject(
-                new AppError(
-                  "Verification job timed out",
-                  504,
-                  "VERIFICATION_TIMEOUT",
-                ),
-              ),
-            env.VERIFICATION_TIMEOUT_MS,
-          );
-        }),
-      ]);
+      timer = setTimeout(() => controller.abort(), env.VERIFICATION_TIMEOUT_MS);
+      return await processVerification(job, { signal: controller.signal, workerId });
     } finally {
       clearTimeout(timer);
     }
@@ -221,4 +212,4 @@ function createWorker() {
   );
   return worker;
 }
-module.exports = { createWorker, processVerification };
+module.exports = { createWorker, processVerification, isRestorationFailure };

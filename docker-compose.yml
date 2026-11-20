@@ -9,6 +9,7 @@ services:
       REDIS_URL: redis://redis:6379
       APP_KEY_PEPPER: ${APP_KEY_PEPPER:?Set APP_KEY_PEPPER in .env}
       BACKUP_STORAGE_ROOT: /var/lib/recovera/backups
+      RUN_VERIFICATION_WORKER: "false"
     volumes: ["./backups:/var/lib/recovera/backups:ro"]
     depends_on: [mongo, redis]
   mongo:

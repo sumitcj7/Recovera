@@ -2,7 +2,20 @@
   "name": "recovera",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["engine", "packages/*"],
-  "scripts": {"start": "npm run start -w @recovera/engine", "dev": "npm run dev -w @recovera/engine", "test": "npm run test -w @recovera/engine"},
-  "engines": {"node": ">=18"}
+  "workspaces": [
+    "engine",
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "npm run start -w @recovera/engine",
+    "dev": "npm run dev -w @recovera/engine",
+    "test": "npm run test -w @recovera/engine",
+    "demo:create": "node scripts/create-demo.js",
+    "benchmark": "node scripts/benchmark.js",
+    "test:integration": "node scripts/run-integration-tests.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "author": {"name": "Sumit kumar Chaudhary"}
 }

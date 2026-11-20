@@ -3,11 +3,16 @@ const { connectDatabase, disconnectDatabase } = require("./config/database");
 const { disconnectRedis } = require("./config/redis");
 const { cleanupAbandoned } = require("./services/dockerRestoreService");
 const { createWorker } = require("./workers/verificationWorker");
+const { reconcileQueuedJobs, markStuckJobs } = require("./services/verificationJobService");
+const crypto = require("crypto");
 let worker;
 async function startWorker({ connectDatabase: shouldConnectDatabase = true } = {}) {
   if (shouldConnectDatabase) await connectDatabase();
-  await cleanupAbandoned();
-  worker = createWorker();
+  const workerId = process.env.WORKER_ID || `embedded-${crypto.randomUUID()}`;
+  await cleanupAbandoned(workerId);
+  const [recovered, stuck] = await Promise.all([reconcileQueuedJobs(), markStuckJobs()]);
+  if (recovered || stuck) logger.warn({ recovered, stuck }, "Verification queue reconciliation completed");
+  worker = createWorker({ workerId });
   logger.info("Verification worker started");
   return worker;
 }

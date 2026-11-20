@@ -9,7 +9,8 @@ let worker;
 async function start() {
   await connectDatabase();
   await connectRedis();
-  worker = await startWorker({ connectDatabase: false });
+  if (env.RUN_VERIFICATION_WORKER)
+    worker = await startWorker({ connectDatabase: false });
   server = app.listen(env.PORT, () =>
     logger.info({ port: env.PORT }, "Recovera Engine listening"),
   );

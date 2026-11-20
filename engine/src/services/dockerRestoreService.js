@@ -7,7 +7,14 @@ const AppError = require("../utils/AppError");
 const backupService = require("./backupService");
 const docker = new Docker();
 
-function withTimeout(promise, ms, message) {
+function abortError() {
+  return new AppError("Verification job was cancelled or timed out", 504, "VERIFICATION_TIMEOUT");
+}
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw abortError();
+}
+
+function withTimeout(promise, ms, message, signal) {
   let timer;
   return Promise.race([
     promise,
@@ -16,6 +23,11 @@ function withTimeout(promise, ms, message) {
         () => reject(new AppError(message, 504, "RESTORE_TIMEOUT")),
         ms,
       );
+    }),
+    new Promise((_, reject) => {
+      if (!signal) return;
+      if (signal.aborted) return reject(abortError());
+      signal.addEventListener("abort", () => reject(abortError()), { once: true });
     }),
   ]).finally(() => clearTimeout(timer));
 }
@@ -31,7 +43,8 @@ async function pullImage(image) {
     );
   }
 }
-async function exec(container, cmd, timeout = env.VERIFICATION_TIMEOUT_MS) {
+async function exec(container, cmd, timeout = env.VERIFICATION_TIMEOUT_MS, signal) {
+  throwIfAborted(signal);
   const instance = await container.exec({
     Cmd: cmd,
     AttachStdout: true,
@@ -60,13 +73,14 @@ async function exec(container, cmd, timeout = env.VERIFICATION_TIMEOUT_MS) {
     }),
     timeout,
     "Container command timed out",
+    signal,
   );
   const result = await instance.inspect();
   if (result.ExitCode !== 0)
     throw new AppError("Restore command failed", 422, "RESTORE_FAILED");
   return { stdout: stdout.slice(-10_000), stderr: stderr.slice(-10_000) };
 }
-async function waitForMongo(container) {
+async function waitForMongo(container, signal) {
   const deadline = Date.now() + 60_000;
   let lastError;
   while (Date.now() < deadline) {
@@ -75,11 +89,12 @@ async function waitForMongo(container) {
         container,
         ["mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 }).ok"],
         10_000,
+        signal,
       );
       return;
     } catch (err) {
       lastError = err;
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await withTimeout(new Promise((resolve) => setTimeout(resolve, 1000)), 2000, "MongoDB startup timed out", signal);
     }
   }
   throw new AppError(
@@ -96,8 +111,10 @@ async function cleanup(container) {
     /* recovery sweep handles interrupted cleanup */
   }
 }
-async function restore(backup) {
-  const source = backupService.resolveLocation(backup.backupLocation);
+async function restore(backup, { signal, workerId } = {}) {
+  throwIfAborted(signal);
+  const source = backupService.validateBackupContent(backup.backupLocation, backup.backupFormat);
+  backupService.verifyChecksum(source, backup.checksum);
   const stats = fs.statSync(source);
   const name = `recovera-verify-${crypto.randomBytes(12).toString("hex")}`;
   let container;
@@ -110,18 +127,22 @@ async function restore(backup) {
       Labels: {
         "recovera.managed": "true",
         "recovera.purpose": "verification",
+        "recovera.worker-id": workerId || "unknown",
       },
       HostConfig: {
         NetworkMode: "none",
         Memory: env.RESTORE_MEMORY_BYTES,
         NanoCPUs: env.RESTORE_CPU_NANO,
+        PidsLimit: env.RESTORE_PIDS_LIMIT,
+        SecurityOpt: ["no-new-privileges:true"],
         ReadonlyRootfs: false,
         Binds: [`${env.BACKUP_STORAGE_ROOT}:/backups:ro`],
       },
       ExposedPorts: {},
     });
     await container.start();
-    await waitForMongo(container);
+    await waitForMongo(container, signal);
+    throwIfAborted(signal);
     const mountedPath = path.posix.join(
       "/backups",
       backup.backupLocation.split(path.sep).join("/"),
@@ -135,7 +156,7 @@ async function restore(backup) {
           "--drop",
           `--archive=${mountedPath}`,
         ];
-    const output = await exec(container, command);
+    const output = await exec(container, command, env.VERIFICATION_TIMEOUT_MS, signal);
     return {
       container,
       cleanup: () => cleanup(container),
@@ -148,13 +169,14 @@ async function restore(backup) {
     throw err;
   }
 }
-async function cleanupAbandoned() {
+async function cleanupAbandoned(workerId) {
+  if (!workerId) return;
   const containers = await docker.listContainers({
     all: true,
-    filters: { label: ["recovera.managed=true"] },
+    filters: { label: ["recovera.managed=true", `recovera.worker-id=${workerId}`] },
   });
   await Promise.all(
     containers.map((item) => cleanup(docker.getContainer(item.Id))),
   );
 }
-module.exports = { restore, cleanupAbandoned, exec };
+module.exports = { restore, cleanupAbandoned, exec, abortError };

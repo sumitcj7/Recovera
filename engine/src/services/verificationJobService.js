@@ -4,16 +4,30 @@ const backupService = require("./backupService");
 const { verificationQueue } = require("../config/queue");
 const AppError = require("../utils/AppError");
 const { assertTransition } = require("../utils/stateMachine");
+const env = require("../config/env");
 async function enqueue(applicationId, backupId, options) {
   await backupService.get(applicationId, backupId);
-  const job = await VerificationJob.create({
-    applicationId,
-    backupId,
-    integrityChecks: options.integrityChecks,
-    recoveryObjectives: options.recoveryObjectives,
-    incidentAt: options.incidentAt,
-    queuedAt: new Date(),
-  });
+  const activeJobKey = `${applicationId}:${backupId}`;
+  let job;
+  try {
+    job = await VerificationJob.create({
+      applicationId,
+      backupId,
+      activeJobKey,
+      integrityChecks: options.integrityChecks,
+      recoveryObjectives: options.recoveryObjectives,
+      incidentAt: options.incidentAt,
+      queuedAt: new Date(),
+    });
+  } catch (err) {
+    if (err.code === 11000)
+      throw new AppError(
+        "A verification job is already in progress for this backup",
+        409,
+        "VERIFICATION_ALREADY_IN_PROGRESS",
+      );
+    throw err;
+  }
   try {
     const queued = await verificationQueue.add(
       "verify-backup",
@@ -59,7 +73,57 @@ async function getReport(applicationId, id) {
 async function transition(job, next, updates = {}) {
   assertTransition(job.status, next);
   Object.assign(job, updates, { status: next });
+  if (["completed", "failed", "cancelled"].includes(next))
+    job.activeJobKey = undefined;
   await job.save();
   return job;
 }
-module.exports = { enqueue, get, list, getReport, transition };
+async function reconcileQueuedJobs() {
+  const queuedJobs = await VerificationJob.find({ status: "queued" }).limit(
+    500,
+  );
+  let recovered = 0;
+  for (const job of queuedJobs) {
+    const queued =
+      job.queueJobId && (await verificationQueue.getJob(job.queueJobId));
+    if (queued) continue;
+    try {
+      const replacement = await verificationQueue.add(
+        "verify-backup",
+        { verificationJobId: String(job._id) },
+        { jobId: String(job._id) },
+      );
+      job.queueJobId = String(replacement.id);
+      await job.save();
+      recovered += 1;
+    } catch (_) {
+      // The existing queued state remains truthful and will be retried on the next reconciliation.
+    }
+  }
+  return recovered;
+}
+async function markStuckJobs() {
+  const cutoff = new Date(Date.now() - env.STUCK_JOB_THRESHOLD_MS);
+  const jobs = await VerificationJob.find({
+    status: { $in: ["processing", "restoring", "verifying"] },
+    startedAt: { $lt: cutoff },
+  }).limit(500);
+  for (const job of jobs)
+    await transition(job, "failed", {
+      completedAt: new Date(),
+      error: {
+        code: "STUCK_JOB",
+        message: "Job exceeded the configured stuck-job threshold",
+      },
+    });
+  return jobs.length;
+}
+module.exports = {
+  enqueue,
+  get,
+  list,
+  getReport,
+  transition,
+  reconcileQueuedJobs,
+  markStuckJobs,
+};

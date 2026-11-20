@@ -14,6 +14,7 @@ const schema = new mongoose.Schema(
       index: true,
     },
     queueJobId: { type: String, unique: true, sparse: true },
+    activeJobKey: { type: String, unique: true, sparse: true, select: false },
     status: {
       type: String,
       enum: [
